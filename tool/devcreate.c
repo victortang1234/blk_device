@@ -3,7 +3,7 @@
  * Name: devcreate
  * Date: 20190107
  * Author:
- * 		- Group 3
+ * 		- Victor Tang
  *
  */
 #include <getopt.h>
