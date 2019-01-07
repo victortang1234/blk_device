@@ -8,14 +8,22 @@
 
 #include <linux/module.h>
 #include <linux/miscdevice.h>
+#include <linux/version.h>
 
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 
 #include "include/blkdev_ioctl.h"
 
-static int ioctl(struct inode *inode, struct file *file,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+static int
+ioctl(struct inode *inode, struct file *file,
 		unsigned int cmd, unsigned long user)
+#else
+static long
+unlocked_ioctl(struct file *file, unsigned int cmd,
+		unsigned long user)
+#endif
 {
 	struct delete_param del_param;
 	struct create_param ctr_param;
@@ -64,7 +72,11 @@ OUT:
 }
 
 static struct file_operations _misc_ctl_fops = {
-	.compat_ioctl = ioctl,
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 36)
+	.ioctl = ioctl,
+#else
+	.unlocked_ioctl = unlocked_ioctl,
+#endif
 	.owner = THIS_MODULE,
 };
 
