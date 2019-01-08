@@ -4,6 +4,10 @@
 #
 ##########################################
 
+#disable "module verification failed:
+#	signature and/or	required key missing - tainting kernel"
+CONFIG_MODULE_SIG=n
+
 obj-m := blkdev.o
 blkdev-y += blkdev_ioctl.o
 #blkdev-y += blkdev_driver.o
