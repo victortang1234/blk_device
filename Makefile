@@ -10,7 +10,7 @@ CONFIG_MODULE_SIG=n
 
 obj-m := blkdev.o
 blkdev-y += blkdev_ioctl.o
-#blkdev-y += blkdev_driver.o
+blkdev-y += blkdev_driver.o
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD := $(shell pwd)
