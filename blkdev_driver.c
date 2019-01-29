@@ -59,6 +59,16 @@ static struct block_device_operations disk_fops = {
 	.owner = THIS_MODULE,
 };
 
+static void make_request(struct request_queue *q, struct bio *bio)
+{
+	struct blk_dev *dev = q->queuedata;
+
+	bio->bi_bdev = dev->device;
+	submit_bio(bio_rw(bio), bio);
+
+	//return 0;
+}
+
 static struct blk_dev *check_dev_exist(const char *dev_name)
 {
 	struct blk_dev *dev = NULL;
@@ -114,6 +124,17 @@ OUT:
 	return ret;
 }
 
+/*
+ * work flow:
+ * 1. define device struct
+ * 2. alloc major
+ * 3. alloc gendisk
+ * 4. alloc request queue
+ * 5. initialize request queue
+ * 6. initialize gendisk struct
+ * 7. add gendisk into system
+ * 8. now, u can check device in /dev/
+ */
 int dev_create(const char *dev_name, const char *phy_dev)
 {
 	struct blk_dev *dev;
@@ -129,49 +150,76 @@ int dev_create(const char *dev_name, const char *phy_dev)
 	if (!dev) {
 		printk("alloc mem dev fail\n");
 		ret = -ENOMEM;
-		goto ERR_OUT;
+		goto OUT;
 	}
 	strncpy(dev->name, dev_name, DISK_NAME_LEN);
 
+	/*register a new block device*/
+	/*@major: the requested major device number [1..255].
+	 *If major=0, try to allocate any unused major number.*/
+	/*@name: the name of the new block device as a zero terminated string.
+	 * The name of the new block device must be unique within the system.*/
 	dev->major = register_blkdev(DISK_INIT_MAJOR, dev_name);
-	if (dev->major) {
+	if (dev->major < 0) {
 		printk("get major fail");
 		ret = -EIO;
-		goto ERR_OUT;
+		goto ERR_OUT0;
 	}
 
+	/* alloc gendisk */
 	dev->disk = alloc_disk(1);
 	if (!dev->disk) {
 		printk("alloc disk error");
 		ret = -ENOMEM;
-		goto ERR_OUT;
+		goto ERR_OUT1;
 	}
 
+	/* alloc request queue */
 	dev->queue = blk_alloc_queue(GFP_KERNEL);
 	if (!dev->queue) {
 		printk("blk alloc queue error");
 		ret =  -ENOMEM;
-		goto ERR_OUT;
+		goto ERR_OUT2;
 	}
 
+	/* initialize request queue */
 	blk_queue_make_request(dev->queue, make_request);
+
+	/* init gendisk */
 	dev->disk->queue = dev->queue;
 	dev->disk->queue->queuedata = dev;
 
-	//strncpy(dev->disk->disk_na
+	strncpy(dev->disk->disk_name, dev_name, DISK_NAME_LEN);
 	dev->disk->major = dev->major;
+	dev->disk->first_minor = DISK_INIT_MINOR;
+	dev->disk->fops = &disk_fops;
+	dev->disk->private_data = dev;
 
-	/*
-	dev->device = open_bdev_excl(phy_dev, FMODE_WRITE | FMODE_READ,
-			dev->device);
-	*/
+	//dev->device = open_bdev_excl(phy_dev, FMODE_WRITE | FMODE_READ,
+	//		dev->device);
+
 	if (IS_ERR(dev->device)) {
 		printk("Open the device %s fail", phy_dev);
 		ret = -ENOENT;
 		goto OUT;
 	}
 
-ERR_OUT:
+	dev->size = get_capacity(dev->device->bd_disk) < SECTOR_BITS;
+	set_capacity(dev->disk, (dev->size >> SECTOR_BITS));
+
+	/* add gendisk into system */
+	add_disk(dev->disk);
+	dev_add(dev);
+
+	/* now, u can check device in /dev/ */
+	return 0;
+
+ERR_OUT2:
+	put_disk(dev->disk);
+ERR_OUT1:
+	unregister_blkdev(dev->major, dev->name);
+ERR_OUT0:
+	kfree(dev);
 OUT:
 	return ret;
 }
